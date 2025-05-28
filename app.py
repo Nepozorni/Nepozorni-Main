@@ -52,14 +52,19 @@ def load_file():
                 break
 
             # Preberi frame
-            model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025", image=frame)
+            model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image=frame)
+            hand_output.config(state="normal")
             hand_output.insert(tk.END, model_hand_output)
+            hand_output.config(state="disabled")
+
 
 
     else:
         # Preberi sliko
-        model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025", image_path=path)
+        model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image_path=path)
+        hand_output.config(state="normal")
         hand_output.insert(tk.END, model_hand_output)
+        hand_output.config(state="disabled")
 
 
 #ko nalozimo video se ga runna
