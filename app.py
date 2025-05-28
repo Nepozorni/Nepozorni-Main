@@ -38,6 +38,9 @@ def start_video(path):
     global video_player, video_playing
     stop_video()
     video_player = cv2.VideoCapture(path)
+    if not video_player.isOpened():
+        log(f"ERROR: Failed to open video \"{path}\"")
+        return
     video_playing = True
     update_video()
 
@@ -70,10 +73,13 @@ def update_video():
 #prikaz slike, isti postopek kot prej
 def display_image(path):
     global image_player
-    img = Image.open(path).resize((640, 360))
-    image_player = ImageTk.PhotoImage(img)
-    video_label.configure(image=image_player, text="")
-
+    try:
+        img = Image.open(path).resize((640, 360))
+        image_player = ImageTk.PhotoImage(img)
+        video_label.configure(image=image_player, text="")
+    except Exception as e:
+        log(f"ERROR: Failed to open image \"{path}\": {str(e)}")
+        
 #izpis logov v log
 def log(message):
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -82,9 +88,8 @@ def log(message):
     log_box.config(state="disabled")
     log_box.see(tk.END)
 
-#---------------------WINDOW SETUP---------------------
-
-root = tk.Tk() #ustvarimo 
+#---------------------WINDOW SETUP---------------------  
+root = tk.Tk()
 root.title("Nadzor pozornosti")
 root.geometry("1200x800")
 
