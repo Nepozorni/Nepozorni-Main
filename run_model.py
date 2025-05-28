@@ -40,6 +40,6 @@ def run_model(model_path: str, image_path: str = None, image = None) -> tuple:
     # make output
     output = f"> PREDICTION: {top_prediction}\n> PROBABILITY:\n"
     output += "\n".join([f"{k}: {v:.2f}" for k, v in sorted_probs])
-    output += f"\n> INFERENCE TIME: {inference_time_ms:.1f} ms"
+    output += f"\n> INFERENCE TIME: {inference_time_ms:.1f} ms\n\n"
 
     return top_prediction, output

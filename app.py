@@ -35,6 +35,10 @@ def load_file():
         stop_video()
         display_image(path)
 
+    hand_output.config(state="normal")
+    hand_output.delete("1.0", tk.END)
+    hand_output.config(state="disabled")
+
     # model za roke
     if ext in [".mp4", ".avi", ".mov", ".mkv"]:
         cap = cv2.VideoCapture(path)
