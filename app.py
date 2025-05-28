@@ -3,6 +3,7 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 import cv2
 import os
+import run_model
 from datetime import datetime
 
 file_path = None
@@ -11,6 +12,7 @@ video_playing = False
 image_player = None #prikaz slike 
 video_label = None #referenca za box, kjer se bo prikazal video/slika
 log_box = None #referenca za log box
+
 
 #klice ob kliku gumba load
 def load_file():
@@ -33,6 +35,33 @@ def load_file():
         stop_video()
         display_image(path)
 
+    # model za roke
+    if ext in [".mp4", ".avi", ".mov", ".mkv"]:
+        cap = cv2.VideoCapture(path)
+
+        # Preveri, če je video naložen
+        if not cap.isOpened():
+            print("Error: Could not open video.")
+            exit()
+
+        while True:
+            ret, frame = cap.read()
+
+            # Ko se video konča
+            if not ret:
+                break
+
+            # Preberi frame
+            model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025", image=frame)
+            hand_output.insert(tk.END, model_hand_output)
+
+
+    else:
+        # Preberi sliko
+        model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025", image_path=path)
+        hand_output.insert(tk.END, model_hand_output)
+
+
 #ko nalozimo video se ga runna
 def start_video(path):
     global video_player, video_playing
@@ -40,6 +69,7 @@ def start_video(path):
     video_player = cv2.VideoCapture(path)
     video_playing = True
     update_video()
+
 
 #ustavimo predvajanje videa
 def stop_video():
@@ -49,7 +79,8 @@ def stop_video():
         video_player.release()
         video_player = None
 
-#predvajanje vidwa
+
+#predvajanje videa
 def update_video():
     global video_player, image_player
     if not video_playing or not video_player:
@@ -67,12 +98,14 @@ def update_video():
         video_label.configure(image=image_player, text="") #posodabljanje labela z novim framom
     root.after(33, update_video) #prikazujemo 30 fps
 
+
 #prikaz slike, isti postopek kot prej
 def display_image(path):
     global image_player
     img = Image.open(path).resize((640, 360))
     image_player = ImageTk.PhotoImage(img)
     video_label.configure(image=image_player, text="")
+
 
 #izpis logov v log
 def log(message):
