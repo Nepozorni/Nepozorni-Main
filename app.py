@@ -54,8 +54,15 @@ def load_file():
             # Preberi frame
             model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image=frame)
             hand_output.config(state="normal")
+            hand_output.delete(1.0, tk.END)
             hand_output.insert(tk.END, model_hand_output)
             hand_output.config(state="disabled")
+
+            model_head_prediction, model_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame)
+            head_output.config(state="normal")
+            head_output.delete(1.0, tk.END)
+            head_output.insert(tk.END, model_head_output)
+            head_output.config(state="disabled")
 
 
 
@@ -63,8 +70,16 @@ def load_file():
         # Preberi sliko
         model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image_path=path)
         hand_output.config(state="normal")
+        hand_output.delete(1.0, tk.END)
         hand_output.insert(tk.END, model_hand_output)
         hand_output.config(state="disabled")
+
+        model_head_prediction, model_head_output = run_model.run_model("./Models/face_30_epochs.pt", image_path=path)
+        #best.pt vrne error, ker je YOLOv5, pa naj bi mogu bit z novejsim yolo modelom, takda sm dau kr svojga.
+        head_output.config(state="normal")
+        head_output.delete(1.0, tk.END)
+        head_output.insert(tk.END, model_head_output)
+        head_output.config(state="disabled")
 
 
 #ko nalozimo video se ga runna
