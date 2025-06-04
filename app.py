@@ -3,6 +3,7 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 import cv2
 import os
+import run_model
 from datetime import datetime
 
 file_path = None
@@ -11,6 +12,7 @@ video_playing = False
 image_player = None #prikaz slike 
 video_label = None #referenca za box, kjer se bo prikazal video/slika
 log_box = None #referenca za log box
+
 
 #klice ob kliku gumba load
 def load_file():
@@ -33,6 +35,53 @@ def load_file():
         stop_video()
         display_image(path)
 
+    # model za roke
+    if ext in [".mp4", ".avi", ".mov", ".mkv"]:
+        cap = cv2.VideoCapture(path)
+
+        # Preveri, če je video naložen
+        if not cap.isOpened():
+            print("Error: Could not open video.")
+            exit()
+
+        while True:
+            ret, frame = cap.read()
+
+            # Ko se video konča
+            if not ret:
+                break
+
+            # Preberi frame
+            model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image=frame)
+            hand_output.config(state="normal")
+            hand_output.delete(1.0, tk.END)
+            hand_output.insert(tk.END, model_hand_output)
+            hand_output.config(state="disabled")
+
+            model_head_prediction, model_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame)
+            head_output.config(state="normal")
+            head_output.delete(1.0, tk.END)
+            head_output.insert(tk.END, model_head_output)
+            head_output.config(state="disabled")
+
+
+
+    else:
+        # Preberi sliko
+        model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image_path=path)
+        hand_output.config(state="normal")
+        hand_output.delete(1.0, tk.END)
+        hand_output.insert(tk.END, model_hand_output)
+        hand_output.config(state="disabled")
+
+        model_head_prediction, model_head_output = run_model.run_model("./Models/face_30_epochs.pt", image_path=path)
+        #best.pt vrne error, ker je YOLOv5, pa naj bi mogu bit z novejsim yolo modelom, takda sm dau kr svojga.
+        head_output.config(state="normal")
+        head_output.delete(1.0, tk.END)
+        head_output.insert(tk.END, model_head_output)
+        head_output.config(state="disabled")
+
+
 #ko nalozimo video se ga runna
 def start_video(path):
     global video_player, video_playing
@@ -44,6 +93,7 @@ def start_video(path):
     video_playing = True
     update_video()
 
+
 #ustavimo predvajanje videa
 def stop_video():
     global video_player, video_playing
@@ -52,7 +102,8 @@ def stop_video():
         video_player.release()
         video_player = None
 
-#predvajanje vidwa
+
+#predvajanje videa
 def update_video():
     global video_player, image_player
     if not video_playing or not video_player:
@@ -70,6 +121,7 @@ def update_video():
         video_label.configure(image=image_player, text="") #posodabljanje labela z novim framom
     root.after(33, update_video) #prikazujemo 30 fps
 
+
 #prikaz slike, isti postopek kot prej
 def display_image(path):
     global image_player
@@ -79,7 +131,6 @@ def display_image(path):
         video_label.configure(image=image_player, text="")
     except Exception as e:
         log(f"ERROR: Failed to open image \"{path}\": {str(e)}")
-        
 #izpis logov v log
 def log(message):
     timestamp = datetime.now().strftime("%H:%M:%S")
