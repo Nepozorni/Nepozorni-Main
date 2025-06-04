@@ -1,6 +1,6 @@
 from ultralytics import YOLO
 
-def run_model(model_path: str, image_path: str = None, image = None) -> tuple:
+def run_model(model_path: str, image_path: str = None, image = None, prob_array: list = None) -> tuple:
     """Function runs YOLOv8 model and returns top prediction and debug string
         SHAPE:
         > PREDICTION: p
@@ -24,6 +24,10 @@ def run_model(model_path: str, image_path: str = None, image = None) -> tuple:
 
     class_names = r.names
     probs_tensor = r.probs.data # tensors (e.g '1', '20', '5' / 'one_hand', ...)
+
+    if prob_array is not None and len(prob_array) == 27:
+        for i in range(27):
+            prob_array[i] = float(probs_tensor[i])
 
     # fetch probabilites
     prob_dict = {class_names[i]: float(p) for i, p in enumerate(probs_tensor)}
