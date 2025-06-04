@@ -3,7 +3,8 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 import cv2
 import os
-import run_model
+from run_model import run_model
+from evaluate import *
 from datetime import datetime
 import threading
 import queue
@@ -44,13 +45,13 @@ def load_file():
         stop_video()
         display_image(path)
 
-        _, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image_path=path) #zazene se model za roke in v gui se izpise rezultat
+        _, model_hand_output = run_model("./Models/model-21-05-2025.pt", image_path=path) #zazene se model za roke in v gui se izpise rezultat
         hand_output.config(state="normal")
         hand_output.delete(1.0, tk.END)
         hand_output.insert(tk.END, model_hand_output)
         hand_output.config(state="disabled")
 
-        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image_path=path) #zazene se model za glavo in rezultate zapise v gui
+        _, full_head_output = run_model("./Models/face_30_epochs.pt", image_path=path) #zazene se model za glavo in rezultate zapise v gui
 
         #izpise samo max 5 tock z najvecjim probability
         head_lines = full_head_output.splitlines()
@@ -124,14 +125,35 @@ def worker():
     global model_ready
     cap = cv2.VideoCapture(file_path)
     prvi_output = True #video se zacne predvajat ko model vrne prvi output
-
+    head_pred = ""
+    hand_pred = ""
+    seconds_head_pred = 0
+    seconds_hand_pred = 0
     while video_playing and cap.isOpened(): #beremo frame po frame iz videa
         ret, frame = cap.read()
         if not ret:
             break
 
-        _, hand_out = run_model.run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
-        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame) #klicanje modela za head
+        n_hand_pred, hand_out = run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
+        n_head_pred, full_head_output = run_model("./Models/face_30_epochs.pt", image=frame) #klicanje modela za head
+
+        if head_pred != n_head_pred:
+            head_pred = n_head_pred
+            seconds_head_pred = 0
+        elif seconds_head_pred % 30 == 0:
+            seconds_head_pred += 1
+
+        if hand_pred != hand_out:
+            hand_pred = hand_out
+            seconds_hand_pred = 0
+        elif seconds_hand_pred % 30 == 0:
+            seconds_hand_pred += 1
+
+        assessment = evaluate(head_pred, hand_pred, seconds_head_pred, seconds_hand_pred)
+
+        if not is_attentive(assessment):
+            log("SIGNAL")
+
 
         #izpise samo max 5 tock z najvecjim probability za head model
         head_lines = full_head_output.splitlines()
@@ -148,6 +170,7 @@ def worker():
             model_ready = True
             prvi_output = False
 
+        i += 1
     cap.release()
 
 def model_output():
