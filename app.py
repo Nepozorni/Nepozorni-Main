@@ -5,6 +5,8 @@ import cv2
 import os
 import run_model
 from datetime import datetime
+import threading
+import queue
 
 file_path = None
 video_player = None #za predvajanje videa
@@ -42,23 +44,32 @@ def update_boxes_on_image(prob_array):
         log(f"ERROR: Failed to update image: {str(e)}")
 
 
+model_ready = False
+model_queue = queue.Queue() #omogoca komunikacijo med thread in UI
+
+
 #klice ob kliku gumba load
 def load_file():
-    global video_player, video_playing, image_player, file_path #spreminjanje globalih spremenljivk
-
+    global video_player, video_playing, image_player, file_path, model_ready #spreminjanje globalih spremenljivk
     path = filedialog.askopenfilename(filetypes=[("Media files", "*.png *.jpg *.jpeg *.mp4 *.avi *.mov *.mkv")]) #odpremo file explorer
     if not path: #close file explorer
         return
 
     file_path_var.set(path) #zapis patha v textbox
     file_path = path
+    model_ready = False
 
     #zapis v log
     ext = os.path.splitext(path)[-1].lower() #extension v lowercase za lazji comparison, predvajanje videa/prikaz slike
-    if ext in [".mp4", ".avi", ".mov", ".mkv"]:
+    if ext in [".mp4", ".avi", ".mov", ".mkv"]: #ce je datoteka video
         log(f"\"{path}\" loaded, type: video")
         start_video(path)
-    else:
+
+        model_thread = threading.Thread(target=worker, daemon=True) #zagon modelov
+        model_thread.start()
+
+        model_output()
+    else: #ce je datoteka slika
         log(f"\"{path}\" loaded, type: picture")
         stop_video()
         display_image(path)
@@ -97,6 +108,7 @@ def load_file():
     else:
         # Preberi sliko
         model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image_path=path)
+        _, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image_path=path) #zazene se model za roke in v gui se izpise rezultat
         hand_output.config(state="normal")
         hand_output.delete(1.0, tk.END)
         hand_output.insert(tk.END, model_hand_output)
@@ -108,8 +120,20 @@ def load_file():
         head_output.delete(1.0, tk.END)
         head_output.insert(tk.END, model_head_output)
         update_boxes_on_image(head_probabilities)
-        head_output.config(state="disabled")
+        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image_path=path) #zazene se model za glavo in rezultate zapise v gui
 
+        #izpise samo max 5 tock z najvecjim probability
+        head_lines = full_head_output.splitlines()
+        prediction_line = head_lines[0]
+        inference_line = head_lines[-1]
+        prob_lines = head_lines[2:-1][:5]
+
+        head_output_text = f"{prediction_line}\n> TOP 5 PROBABILITIES:\n" + "\n".join(prob_lines) + f"\n{inference_line}"
+
+        head_output.config(state="normal")
+        head_output.delete(1.0, tk.END)
+        head_output.insert(tk.END, head_output_text)
+        head_output.config(state="disabled")
 
 #ko nalozimo video se ga runna
 def start_video(path):
@@ -120,8 +144,7 @@ def start_video(path):
         log(f"ERROR: Failed to open video \"{path}\"")
         return
     video_playing = True
-    update_video()
-
+    update_video.running = False #najprej pocakamo da se modeli inicializirajo, ker cene video runna in outputov ni
 
 #ustavimo predvajanje videa
 def stop_video():
@@ -130,7 +153,6 @@ def stop_video():
     if video_player:
         video_player.release()
         video_player = None
-
 
 #predvajanje videa
 def update_video():
@@ -150,7 +172,6 @@ def update_video():
         video_label.configure(image=image_player, text="") #posodabljanje labela z novim framom
     root.after(33, update_video) #prikazujemo 30 fps
 
-
 #prikaz slike, isti postopek kot prej
 def display_image(path):
     global image_player
@@ -160,6 +181,7 @@ def display_image(path):
         video_label.configure(image=image_player, text="")
     except Exception as e:
         log(f"ERROR: Failed to open image \"{path}\": {str(e)}")
+
 #izpis logov v log
 def log(message):
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -168,8 +190,63 @@ def log(message):
     log_box.config(state="disabled")
     log_box.see(tk.END)
 
-#---------------------WINDOW SETUP---------------------  
-root = tk.Tk()
+def worker():
+    global model_ready
+    cap = cv2.VideoCapture(file_path)
+    prvi_output = True #video se zacne predvajat ko model vrne prvi output
+
+    while video_playing and cap.isOpened(): #beremo frame po frame iz videa
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        _, hand_out = run_model.run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
+        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame) #klicanje modela za head
+
+        #izpise samo max 5 tock z najvecjim probability za head model
+        head_lines = full_head_output.splitlines()
+        prediction_line = head_lines[0]
+        inference_line = head_lines[-1]
+        prob_lines = head_lines[2:-1][:5]
+
+        head_output = f"{prediction_line}\n> TOP 5 PROBABILITIES:\n" + "\n".join(prob_lines) + f"\n{inference_line}"
+
+
+        model_queue.put((hand_out, head_output)) #rezultat damo v queue
+
+        if prvi_output: #model_ready damo na true, video se zacne predvajat
+            model_ready = True
+            prvi_output = False
+
+    cap.release()
+
+def model_output():
+    global model_ready
+    try:
+        while True:
+            hand_out, head_out = model_queue.get_nowait() #preverimo, ce je kej v queue, ce je, izpisemo
+
+            #izpis v UI
+            hand_output.config(state="normal")
+            hand_output.delete(1.0, tk.END)
+            hand_output.insert(tk.END, hand_out)
+            hand_output.config(state="disabled")
+
+            head_output.config(state="normal")
+            head_output.delete(1.0, tk.END)
+            head_output.insert(tk.END, head_out)
+            head_output.config(state="disabled")
+
+            if not update_video.running and model_ready: #ko dobimo prvi output, zazenemo video
+                update_video.running = True
+                update_video()
+    except queue.Empty:
+        pass
+    root.after(33, model_output) #klicemo vsakih 33ms
+
+#---------------------WINDOW SETUP---------------------
+
+root = tk.Tk() #ustvarimo 
 root.title("Nadzor pozornosti")
 root.geometry("1200x800")
 
