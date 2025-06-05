@@ -129,6 +129,7 @@ def worker():
     hand_pred = ""
     seconds_head_pred = 0
     seconds_hand_pred = 0
+    i = 0
     while video_playing and cap.isOpened(): #beremo frame po frame iz videa
         ret, frame = cap.read()
         if not ret:
@@ -137,23 +138,26 @@ def worker():
         n_hand_pred, hand_out = run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
         n_head_pred, full_head_output = run_model("./Models/face_30_epochs.pt", image=frame) #klicanje modela za head
 
-        if head_pred != n_head_pred:
+
+        if head_pred != n_head_pred: # handle napoved rok
             head_pred = n_head_pred
             seconds_head_pred = 0
-        elif seconds_head_pred % 30 == 0:
+        elif i % 30 == 0: # napoved je enaka kot ena sekunda nazaj
             seconds_head_pred += 1
 
         if hand_pred != hand_out:
             hand_pred = hand_out
             seconds_hand_pred = 0
-        elif seconds_hand_pred % 30 == 0:
+        elif i % 30 == 0:
             seconds_hand_pred += 1
 
+        # kliči evalvacijsko funkcijo
         assessment = evaluate(head_pred, hand_pred, seconds_head_pred, seconds_hand_pred)
 
+        # pregeled če je šofer pozoren
+        # TODO: zvočno opozorilo
         if not is_attentive(assessment):
             log("SIGNAL")
-
 
         #izpise samo max 5 tock z najvecjim probability za head model
         head_lines = full_head_output.splitlines()
