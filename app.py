@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog
-from PIL import Image, ImageTk, ImageDraw
+from PIL import Image, ImageTk
 import cv2
 import os
 import run_model
@@ -14,40 +14,6 @@ video_playing = False
 image_player = None #prikaz slike 
 video_label = None #referenca za box, kjer se bo prikazal video/slika
 log_box = None #referenca za log box
-
-def update_boxes_on_image(prob_array):
-    try:
-        updated_img = Image.open("tocke.png").resize((721, 282))
-        draw = ImageDraw.Draw(updated_img, "RGBA")
-
-        for box_id, point_ids in boxes.items():
-            xs = [points[i][0] for i in point_ids]
-            ys = [points[i][1] for i in point_ids]
-            min_x, max_x = min(xs), max(xs)
-            min_y, max_y = min(ys), max(ys)
-
-            # Sum of probabilities for points in this box
-            prob_sum = sum(prob_array[i - 1] for i in point_ids if 0 <= i - 1 < len(prob_array))
-            alpha = int(min(255, max(0, prob_sum * 255)))  # Clamp between 0 and 255
-
-            if alpha > 0:
-                draw.rectangle(
-                    [min_x - 5, min_y - 5, max_x + 5, max_y + 5],
-                    fill=(0, 255, 0, alpha),
-                    outline=(0, 128, 0)
-                )
-            else:
-                draw.rectangle(
-                    [min_x - 5, min_y - 5, max_x + 5, max_y + 5],
-                    outline=(0, 128, 0)
-                )
-
-        tocke_img_tk_updated = ImageTk.PhotoImage(updated_img)
-        image_label.configure(image=tocke_img_tk_updated)
-        image_label.image = tocke_img_tk_updated
-
-    except Exception as e:
-        log(f"ERROR: Failed to update image: {str(e)}")
 
 model_ready = False
 model_queue = queue.Queue() #omogoca komunikacijo med thread in UI
@@ -63,7 +29,6 @@ def load_file():
     file_path = path
     model_ready = False
 
-    head_probabilities = [0.0] * 27
     #zapis v log
     ext = os.path.splitext(path)[-1].lower() #extension v lowercase za lazji comparison, predvajanje videa/prikaz slike
     if ext in [".mp4", ".avi", ".mov", ".mkv"]: #ce je datoteka video
@@ -83,10 +48,9 @@ def load_file():
         hand_output.config(state="normal")
         hand_output.delete(1.0, tk.END)
         hand_output.insert(tk.END, model_hand_output)
-        update_boxes_on_image(head_probabilities)
         hand_output.config(state="disabled")
 
-        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image_path=path, prob_array=head_probabilities) #zazene se model za glavo in rezultate zapise v gui
+        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image_path=path) #zazene se model za glavo in rezultate zapise v gui
 
         #izpise samo max 5 tock z najvecjim probability
         head_lines = full_head_output.splitlines()
@@ -99,7 +63,6 @@ def load_file():
         head_output.config(state="normal")
         head_output.delete(1.0, tk.END)
         head_output.insert(tk.END, head_output_text)
-        update_boxes_on_image(head_probabilities)
         head_output.config(state="disabled")
 
 #ko nalozimo video se ga runna
@@ -160,38 +123,28 @@ def log(message):
 def worker():
     global model_ready
     cap = cv2.VideoCapture(file_path)
-    prvi_output = True
+    prvi_output = True #video se zacne predvajat ko model vrne prvi output
 
-    while video_playing and cap.isOpened():
+    while video_playing and cap.isOpened(): #beremo frame po frame iz videa
         ret, frame = cap.read()
         if not ret:
             break
 
-        _, hand_out = run_model.run_model("./Models/model-21-05-2025.pt", image=frame)
+        _, hand_out = run_model.run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
+        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame) #klicanje modela za head
 
-        head_probabilities = [0.0] * 27
-        _, full_head_output = run_model.run_model(
-            "./Models/face_30_epochs.pt",
-            image=frame,
-            prob_array=head_probabilities
-        )
-
-        # Parse for display
+        #izpise samo max 5 tock z najvecjim probability za head model
         head_lines = full_head_output.splitlines()
         prediction_line = head_lines[0]
         inference_line = head_lines[-1]
         prob_lines = head_lines[2:-1][:5]
 
-        head_output_text = (
-            f"{prediction_line}\n> TOP 5 PROBABILITIES:\n"
-            + "\n".join(prob_lines)
-            + f"\n{inference_line}"
-        )
+        head_output = f"{prediction_line}\n> TOP 5 PROBABILITIES:\n" + "\n".join(prob_lines) + f"\n{inference_line}"
 
-        # Send everything via queue
-        model_queue.put((hand_out, head_output_text, head_probabilities))
 
-        if prvi_output:
+        model_queue.put((hand_out, head_output)) #rezultat damo v queue
+
+        if prvi_output: #model_ready damo na true, video se zacne predvajat
             model_ready = True
             prvi_output = False
 
@@ -201,8 +154,9 @@ def model_output():
     global model_ready
     try:
         while True:
-            hand_out, head_out, head_probs = model_queue.get_nowait()
+            hand_out, head_out = model_queue.get_nowait() #preverimo, ce je kej v queue, ce je, izpisemo
 
+            #izpis v UI
             hand_output.config(state="normal")
             hand_output.delete(1.0, tk.END)
             hand_output.insert(tk.END, hand_out)
@@ -213,14 +167,11 @@ def model_output():
             head_output.insert(tk.END, head_out)
             head_output.config(state="disabled")
 
-            update_boxes_on_image(head_probs)  # <== ADD THIS
-
-            if not update_video.running and model_ready:
+            if not update_video.running and model_ready: #ko dobimo prvi output, zazenemo video
                 update_video.running = True
                 update_video()
     except queue.Empty:
         pass
-
     root.after(33, model_output) #klicemo vsakih 33ms
 
 #---------------------WINDOW SETUP---------------------
@@ -277,63 +228,11 @@ hand_output.config(state="normal")
 hand_output.config(state="disabled")
 
 #------SPODNJI DEL------
-bottom_frame = tk.Frame(root)
-bottom_frame.pack(fill=tk.BOTH, expand=True, pady=10, padx=10)
+#log text
+tk.Label(root, text="LOG", anchor='w', font=('Arial', 10, 'bold')).pack(fill=tk.X, padx=12, pady=(10, 0))
 
-# left: tocke image
-image_frame = tk.Frame(bottom_frame)
-image_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
-
-points = {
-    1: (30, 180), 19: (100, 60),
-    15: (550, 90), 20: (600, 165),
-    2: (130, 15), 3: (240, 15), 4: (380, 45), 18: (420, 85),
-    5: (220, 80), 6: (290, 105), 7: (340, 140), 8: (160, 150), 9: (250, 150), 21: (395, 70),
-    10: (140, 155), 11: (275, 155), 12: (180, 190), 13: (400, 170), 14: (270, 240),
-    22: (435, 150), 23: (430, 170), 24: (550, 55), 25: (470, 180), 26: (490, 180),
-    16: (70, 220), 17: (640, 220), 27: (360, 265)
-}
-
-# Groupings: box number -> list of point indices
-boxes = {
-    1: [1, 19],
-    2: [15, 20],
-    3: [2, 3, 4, 18],
-    4: [5, 6, 7, 8, 9, 21],
-    5: [10, 11, 12, 13, 14],
-    6: [22, 23, 24, 25, 26],
-    7: [16],
-    8: [17],
-    9: [27]
-}
-
-# Open and draw image
-try:
-    tocke_img = Image.open("tocke.png").resize((721, 282))
-    draw = ImageDraw.Draw(tocke_img, "RGBA")
-
-    for box_points in boxes.values():
-        xs = [points[i][0] for i in box_points]
-        ys = [points[i][1] for i in box_points]
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
-        draw.rectangle([min_x - 5, min_y - 5, max_x + 5, max_y + 5], fill=(0, 255, 0, 100), outline=(0, 128, 0))
-
-    tocke_img_tk = ImageTk.PhotoImage(tocke_img)
-    image_label = tk.Label(image_frame, image=tocke_img_tk)
-    image_label.image = tocke_img_tk
-    image_label.pack()
-except Exception as e:
-    image_label = tk.Label(image_frame, text=f"Failed to load tocke.png\n{e}", fg="red")
-    image_label.pack()
-
-# right: log box
-log_frame = tk.Frame(bottom_frame)
-log_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-
-tk.Label(log_frame, text="LOG", anchor='w', font=('Arial', 10, 'bold')).pack(fill=tk.X)
-
-log_box = tk.Text(log_frame, height=8, bg="lightgray", state="disabled")
-log_box.pack(fill=tk.BOTH, expand=True)
+#log box
+log_box = tk.Text(root, height=8, bg="lightgray", state="disabled")
+log_box.pack(fill=tk.BOTH, padx=10, pady=5, expand=True)
 
 root.mainloop()
