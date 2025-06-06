@@ -7,6 +7,9 @@ import run_model
 from datetime import datetime
 import threading
 import queue
+from prometheus_client import start_http_server, Counter, Gauge
+import GPUtil
+import psutil
 
 file_path = None
 video_player = None #za predvajanje videa
@@ -14,6 +17,24 @@ video_playing = False
 image_player = None #prikaz slike 
 video_label = None #referenca za box, kjer se bo prikazal video/slika
 log_box = None #referenca za log box
+
+# Prometheus
+processed_frames_hand = Counter('processed_frames_hand_total', 'Stevilo obdelanih frames modela glave')
+processed_frames_head = Counter('processed_frames_head_total', 'Stevilo obdelanih frames modela roke')
+cpu_usage = Gauge('cpu_usage_percent', 'Obremenitev CPU')
+gpu_usage = Gauge('gpu_usage_percent', 'Obremenitev GPU')
+
+start_http_server(8000)
+
+def monitor_usage():
+    while True:
+        cpu_usage.set(psutil.cpu_percent(interval=1))
+        try:
+            gpus = GPUtil.getGPUs()
+            if gpus:
+                gpu_usage.set(gpus[0].load * 100)
+        except:
+            gpu_usage.set(0)
 
 def update_boxes_on_image(prob_array):
     try:
@@ -50,6 +71,8 @@ model_queue = queue.Queue() #omogoca komunikacijo med thread in UI
 
 #klice ob kliku gumba load
 def load_file():
+    processed_frames_hand._value.set(0)
+    processed_frames_head._value.set(0)
     global video_player, video_playing, image_player, file_path, model_ready #spreminjanje globalih spremenljivk
     path = filedialog.askopenfilename(filetypes=[("Media files", "*.png *.jpg *.jpeg *.mp4 *.avi *.mov *.mkv")]) #odpremo file explorer
     if not path: #close file explorer
@@ -59,12 +82,12 @@ def load_file():
     file_path = path
     model_ready = False
 
-    #zapis v log
     ext = os.path.splitext(path)[-1].lower() #extension v lowercase za lazji comparison, predvajanje videa/prikaz slike
     if ext in [".mp4", ".avi", ".mov", ".mkv"]: #ce je datoteka video
         log(f"\"{path}\" loaded, type: video")
         start_video(path)
 
+        # Samo zaženi thread, ki bo frame-e procesiral v ozadju
         model_thread = threading.Thread(target=worker, daemon=True) #zagon modelov
         model_thread.start()
 
@@ -74,56 +97,19 @@ def load_file():
         stop_video()
         display_image(path)
 
-    head_probabilities = [0.0] * 27
-    # model za roke
-    if ext in [".mp4", ".avi", ".mov", ".mkv"]:
-        cap = cv2.VideoCapture(path)
+        head_probabilities = [0.0] * 27
 
-        # Preveri, če je video naložen
-        if not cap.isOpened():
-            print("Error: Could not open video.")
-            exit()
-
-        while True:
-            ret, frame = cap.read()
-
-            # Ko se video konča
-            if not ret:
-                break
-
-            # Preberi frame
-            model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image=frame)
-            hand_output.config(state="normal")
-            hand_output.delete(1.0, tk.END)
-            hand_output.insert(tk.END, model_hand_output)
-            hand_output.config(state="disabled")
-
-            model_head_prediction, model_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame, prob_array=head_probabilities)
-            head_output.config(state="normal")
-            head_output.delete(1.0, tk.END)
-            head_output.insert(tk.END, model_head_output)
-            update_boxes_on_image(head_probabilities)
-            head_output.config(state="disabled")
-
-    else:
-        # Preberi sliko
-        model_hand_prediction, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image_path=path)
         _, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image_path=path) #zazene se model za roke in v gui se izpise rezultat
         hand_output.config(state="normal")
         hand_output.delete(1.0, tk.END)
         hand_output.insert(tk.END, model_hand_output)
         hand_output.config(state="disabled")
 
-        model_head_prediction, model_head_output = run_model.run_model("./Models/face_30_epochs.pt", image_path=path, prob_array=head_probabilities)
-        #best.pt vrne error, ker je YOLOv5, pa naj bi mogu bit z novejsim yolo modelom, takda sm dau kr svojga.
-        head_output.config(state="normal")
-        head_output.delete(1.0, tk.END)
-        head_output.insert(tk.END, model_head_output)
+        _, model_head_output = run_model.run_model("./Models/face_30_epochs.pt", image_path=path, prob_array=head_probabilities) #zazene se model za glavo in rezultate zapise v gui
         update_boxes_on_image(head_probabilities)
-        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image_path=path) #zazene se model za glavo in rezultate zapise v gui
 
         #izpise samo max 5 tock z najvecjim probability
-        head_lines = full_head_output.splitlines()
+        head_lines = head_output.splitlines()
         prediction_line = head_lines[0]
         inference_line = head_lines[-1]
         prob_lines = head_lines[2:-1][:5]
@@ -193,7 +179,8 @@ def log(message):
 def worker():
     global model_ready
     cap = cv2.VideoCapture(file_path)
-    prvi_output = True #video se zacne predvajat ko model vrne prvi output
+    prvi_output = True  #video se zacne predvajat ko model vrne prvi output
+    head_probabilities = [0.0] * 27
 
     while video_playing and cap.isOpened(): #beremo frame po frame iz videa
         ret, frame = cap.read()
@@ -201,7 +188,9 @@ def worker():
             break
 
         _, hand_out = run_model.run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
-        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame) #klicanje modela za head
+        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame, prob_array=head_probabilities) #klicanje modela za head
+
+        update_boxes_on_image(head_probabilities)
 
         #izpise samo max 5 tock z najvecjim probability za head model
         head_lines = full_head_output.splitlines()
@@ -211,14 +200,16 @@ def worker():
 
         head_output = f"{prediction_line}\n> TOP 5 PROBABILITIES:\n" + "\n".join(prob_lines) + f"\n{inference_line}"
 
-
         model_queue.put((hand_out, head_output)) #rezultat damo v queue
+        processed_frames_hand.inc()
+        processed_frames_head.inc()
 
         if prvi_output: #model_ready damo na true, video se zacne predvajat
             model_ready = True
             prvi_output = False
 
     cap.release()
+
 
 def model_output():
     global model_ready
@@ -357,4 +348,5 @@ tk.Label(log_frame, text="LOG", anchor='w', font=('Arial', 10, 'bold')).pack(fil
 log_box = tk.Text(log_frame, height=8, bg="lightgray", state="disabled")
 log_box.pack(fill=tk.BOTH, expand=True)
 
+threading.Thread(target=monitor_usage, daemon=True).start()
 root.mainloop()
