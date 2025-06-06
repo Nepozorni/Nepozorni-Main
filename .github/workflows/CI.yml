@@ -18,7 +18,7 @@ jobs:
 
       - name: Install libraries
         run: |
-          pip install Pillow opencv-python
+              pip install Pillow opencv-python pytest
 
       - name: Run tests
         run: |
