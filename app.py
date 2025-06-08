@@ -7,9 +7,13 @@ import run_model
 from datetime import datetime
 import threading
 import queue
-from prometheus_client import start_http_server, Counter, Gauge
+from prometheus_client import Counter, Gauge
 import GPUtil
 import psutil
+import paho.mqtt.client as mqtt
+import json
+import socket
+import time
 
 file_path = None
 video_player = None #za predvajanje videa
@@ -17,24 +21,48 @@ video_playing = False
 image_player = None #prikaz slike 
 video_label = None #referenca za box, kjer se bo prikazal video/slika
 log_box = None #referenca za log box
+video_active = False
+model_ready = False
+
+model_queue = queue.Queue() #omogoca komunikacijo med thread in UI
 
 # Prometheus
-processed_frames_hand = Counter('processed_frames_hand_total', 'Stevilo obdelanih frames modela glave')
-processed_frames_head = Counter('processed_frames_head_total', 'Stevilo obdelanih frames modela roke')
+frame_count_hand = Counter('processed_frames_hand_total', 'Stevilo obdelanih frames modela glave')
+frame_count_head = Counter('processed_frames_head_total', 'Stevilo obdelanih frames modela roke')
 cpu_usage = Gauge('cpu_usage_percent', 'Obremenitev CPU')
 gpu_usage = Gauge('gpu_usage_percent', 'Obremenitev GPU')
 
-start_http_server(8000)
+ip_address = socket.gethostbyname(socket.gethostname())
+mqtt_client = mqtt.Client(client_id=ip_address)
+mqtt_client.connect("localhost", 1883, 60)
+mqtt_client.loop_start()
 
 def monitor_usage():
+    global frame_count_hand, frame_count_head
+
     while True:
-        cpu_usage.set(psutil.cpu_percent(interval=1))
+        if not video_active:
+            time.sleep(0.5)
+            continue
+
+        cpu = psutil.cpu_percent(interval=None)
         try:
             gpus = GPUtil.getGPUs()
-            if gpus:
-                gpu_usage.set(gpus[0].load * 100)
+            gpu = gpus[0].load * 100 if gpus else 0
         except:
-            gpu_usage.set(0)
+            gpu = 0
+
+        data = {
+            "cpu usage": cpu,
+            "gpu usage": gpu,
+            "frames_hand_total": frame_count_hand._value.get(),
+            "frames_head_total": frame_count_head._value.get(),
+        }
+        mqtt_client.publish("/metrike", json.dumps(data), qos=1)
+
+        #log(f"[DEBUG] skupno: roka={frame_count_hand}, glava={frame_count_head}")
+
+        time.sleep(1) #posilja na eno sekundo
 
 def update_boxes_on_image(prob_array):
     try:
@@ -65,15 +93,12 @@ def update_boxes_on_image(prob_array):
         log(f"ERROR: Failed to update image: {str(e)}")
 
 
-model_ready = False
-model_queue = queue.Queue() #omogoca komunikacijo med thread in UI
-
-
 #klice ob kliku gumba load
 def load_file():
-    processed_frames_hand._value.set(0)
-    processed_frames_head._value.set(0)
-    global video_player, video_playing, image_player, file_path, model_ready #spreminjanje globalih spremenljivk
+    global video_player, video_playing, image_player, file_path, model_ready, frame_count_hand, frame_count_head #spreminjanje globalih spremenljivk
+    frame_count_hand._value.set(0)
+    frame_count_head._value.set(0)
+
     path = filedialog.askopenfilename(filetypes=[("Media files", "*.png *.jpg *.jpeg *.mp4 *.avi *.mov *.mkv")]) #odpremo file explorer
     if not path: #close file explorer
         return
@@ -96,6 +121,8 @@ def load_file():
         log(f"\"{path}\" loaded, type: picture")
         stop_video()
         display_image(path)
+        frame_count_hand = 1
+        frame_count_head = 1
 
         head_probabilities = [0.0] * 27
 
@@ -109,7 +136,7 @@ def load_file():
         update_boxes_on_image(head_probabilities)
 
         #izpise samo max 5 tock z najvecjim probability
-        head_lines = head_output.splitlines()
+        head_lines = model_head_output.splitlines()
         prediction_line = head_lines[0]
         inference_line = head_lines[-1]
         prob_lines = head_lines[2:-1][:5]
@@ -123,7 +150,8 @@ def load_file():
 
 #ko nalozimo video se ga runna
 def start_video(path):
-    global video_player, video_playing
+    global video_player, video_playing, video_active
+    video_active = True
     stop_video()
     video_player = cv2.VideoCapture(path)
     if not video_player.isOpened():
@@ -136,20 +164,22 @@ def start_video(path):
 def stop_video():
     global video_player, video_playing
     video_playing = False
+
     if video_player:
         video_player.release()
         video_player = None
 
 #predvajanje videa
 def update_video():
-    global video_player, image_player
+    global video_player, image_player, video_active
     if not video_playing or not video_player:
         return
 
     ret, frame = video_player.read() #branje naslednjega frama iz videa
     if not ret: #ko doseze zadnji frame gre nazaj na zacetek
-        video_player.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        ret, frame = video_player.read()
+        stop_video()
+        video_active = False
+        return
     if ret:
         frame = cv2.resize(frame, (640, 360)) #resize da se lepo prilega
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #bgr -> rgb
@@ -177,18 +207,26 @@ def log(message):
     log_box.see(tk.END)
 
 def worker():
-    global model_ready
+    global model_ready, video_active
     cap = cv2.VideoCapture(file_path)
+    global frame_count_hand, frame_count_head
+
     prvi_output = True  #video se zacne predvajat ko model vrne prvi output
     head_probabilities = [0.0] * 27
 
     while video_playing and cap.isOpened(): #beremo frame po frame iz videa
         ret, frame = cap.read()
         if not ret:
+            video_active = False
             break
 
         _, hand_out = run_model.run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
+        if hand_out is not None:
+            frame_count_hand.inc()
+
         _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame, prob_array=head_probabilities) #klicanje modela za head
+        if full_head_output is not None:
+            frame_count_head.inc()
 
         update_boxes_on_image(head_probabilities)
 
@@ -201,15 +239,13 @@ def worker():
         head_output = f"{prediction_line}\n> TOP 5 PROBABILITIES:\n" + "\n".join(prob_lines) + f"\n{inference_line}"
 
         model_queue.put((hand_out, head_output)) #rezultat damo v queue
-        processed_frames_hand.inc()
-        processed_frames_head.inc()
 
         if prvi_output: #model_ready damo na true, video se zacne predvajat
             model_ready = True
+            threading.Thread(target=monitor_usage, daemon=True).start()
             prvi_output = False
 
     cap.release()
-
 
 def model_output():
     global model_ready
@@ -348,5 +384,4 @@ tk.Label(log_frame, text="LOG", anchor='w', font=('Arial', 10, 'bold')).pack(fil
 log_box = tk.Text(log_frame, height=8, bg="lightgray", state="disabled")
 log_box.pack(fill=tk.BOTH, expand=True)
 
-threading.Thread(target=monitor_usage, daemon=True).start()
 root.mainloop()
