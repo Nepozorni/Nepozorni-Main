@@ -7,7 +7,7 @@ import run_model
 from datetime import datetime
 import threading
 import queue
-from prometheus_client import Counter, Gauge
+from prometheus_client import Counter, Gauge, start_http_server
 import GPUtil
 import psutil
 import paho.mqtt.client as mqtt
@@ -18,7 +18,7 @@ import time
 file_path = None
 video_player = None #za predvajanje videa
 video_playing = False
-image_player = None #prikaz slike 
+image_player = None #prikaz slike
 video_label = None #referenca za box, kjer se bo prikazal video/slika
 log_box = None #referenca za log box
 video_active = False
@@ -31,6 +31,8 @@ frame_count_hand = Counter('processed_frames_hand_total', 'Stevilo obdelanih fra
 frame_count_head = Counter('processed_frames_head_total', 'Stevilo obdelanih frames modela roke')
 cpu_usage = Gauge('cpu_usage_percent', 'Obremenitev CPU')
 gpu_usage = Gauge('gpu_usage_percent', 'Obremenitev GPU')
+
+start_http_server(8000)
 
 ip_address = socket.gethostbyname(socket.gethostname())
 mqtt_client = mqtt.Client(client_id=ip_address)
@@ -45,16 +47,17 @@ def monitor_usage():
             time.sleep(0.5)
             continue
 
-        cpu = psutil.cpu_percent(interval=None)
+        cpu_usage.set(psutil.cpu_percent(interval=1))
         try:
             gpus = GPUtil.getGPUs()
-            gpu = gpus[0].load * 100 if gpus else 0
+            if gpus:
+                gpu_usage.set(gpus[0].load * 100)
         except:
-            gpu = 0
+            gpu_usage.set(0)
 
         data = {
-            "cpu usage": cpu,
-            "gpu usage": gpu,
+            "cpu usage": cpu_usage,
+            "gpu usage": gpu_usage,
             "frames_hand_total": frame_count_hand._value.get(),
             "frames_head_total": frame_count_head._value.get(),
         }
