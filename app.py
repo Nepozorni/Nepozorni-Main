@@ -32,11 +32,9 @@ frame_count_head = Counter('processed_frames_head_total', 'Stevilo obdelanih fra
 cpu_usage = Gauge('cpu_usage_percent', 'Obremenitev CPU')
 gpu_usage = Gauge('gpu_usage_percent', 'Obremenitev GPU')
 
-start_http_server(8000)
-
 ip_address = socket.gethostbyname(socket.gethostname())
 mqtt_client = mqtt.Client(client_id=ip_address)
-mqtt_client.connect("localhost", 1883, 60)
+mqtt_client.connect("10.243.214.28", 1883, 60)
 mqtt_client.loop_start()
 
 def monitor_usage():
@@ -56,8 +54,8 @@ def monitor_usage():
             gpu_usage.set(0)
 
         data = {
-            "cpu usage": cpu_usage,
-            "gpu usage": gpu_usage,
+            "cpu usage": cpu_usage._value.get(),
+            "gpu usage": gpu_usage._value.get(),
             "frames_hand_total": frame_count_hand._value.get(),
             "frames_head_total": frame_count_head._value.get(),
         }
