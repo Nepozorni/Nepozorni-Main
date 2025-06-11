@@ -8,6 +8,7 @@ from evaluate import *
 from datetime import datetime
 import threading
 import queue
+"""
 from prometheus_client import Counter, Gauge
 import GPUtil
 import psutil
@@ -15,6 +16,7 @@ import paho.mqtt.client as mqtt
 import json
 import socket
 import time
+"""
 
 file_path = None
 video_player = None #za predvajanje videa
@@ -44,7 +46,7 @@ def update_boxes_on_image(prob_array):
             min_x, max_x = min(xs), max(xs)
             min_y, max_y = min(ys), max(ys)
 
-            prob_sum = sum(prob_array[i - 1] for i in point_ids if 0 <= i - 1 < len(prob_array))
+            prob_sum = prob_array[box_id - 1]
             prob_clamped = min(1.0, max(0.0, prob_sum))
 
             alpha = int(prob_clamped * 150)  # max alpha = 150 (more see-through)
@@ -95,7 +97,7 @@ def load_file():
         frame_count_hand = 1
         frame_count_head = 1
 
-        head_probabilities = [0.0] * 27
+        head_probabilities = [0.0] * 9
 
         _, model_hand_output = run_model("./Models/model-21-05-2025.pt", image_path=path) #zazene se model za roke in v gui se izpise rezultat
         hand_output.config(state="normal")
@@ -103,7 +105,7 @@ def load_file():
         hand_output.insert(tk.END, model_hand_output)
         hand_output.config(state="disabled")
 
-        _, model_head_output = run_model.run_model("./Models/face_30_epochs.pt", image_path=path, prob_array=head_probabilities) #zazene se model za glavo in rezultate zapise v gui
+        _, model_head_output = run_model.run_model("./Models/boxesmodel50epochs.pt", image_path=path, prob_array=head_probabilities) #zazene se model za glavo in rezultate zapise v gui
         update_boxes_on_image(head_probabilities)
 
         #izpise samo max 5 tock z najvecjim probability
@@ -181,7 +183,7 @@ def worker():
     global model_ready, video_active
     cap = cv2.VideoCapture(file_path)
 
-    head_probabilities = [0.0] * 27
+    head_probabilities = [0.0] * 9
 
     prvi_output = True #video se zacne predvajat ko model vrne prvi output
     head_pred = ""
@@ -197,11 +199,11 @@ def worker():
 
         _, hand_out = run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
 
-        _, full_head_output = run_model("./Models/face_30_epochs.pt", image=frame, prob_array=head_probabilities) #klicanje modela za head
+        _, full_head_output = run_model("./Models/boxesmodel50epochs.pt", image=frame, prob_array=head_probabilities) #klicanje modela za head
 
         update_boxes_on_image(head_probabilities)
         n_hand_pred, hand_out = run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
-        n_head_pred, full_head_output = run_model("./Models/face_30_epochs.pt", image=frame) #klicanje modela za head
+        n_head_pred, full_head_output = run_model("./Models/boxesmodel50epochs.pt", image=frame) #klicanje modela za head
 
         if head_pred != n_head_pred: # handle napoved rok
             head_pred = n_head_pred
@@ -386,6 +388,18 @@ boxes = {
     7: [16],
     8: [17],
     9: [27]
+}
+
+boxesModel = {
+    1: [1],
+    2: [2],
+    3: [3],
+    4: [4],
+    5: [5],
+    6: [6],
+    7: [7],
+    8: [8],
+    9: [9]
 }
 
 # Open and draw image

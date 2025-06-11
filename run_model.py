@@ -25,8 +25,8 @@ def run_model(model_path: str, image_path: str = None, image = None, prob_array:
     class_names = r.names
     probs_tensor = r.probs.data # tensors (e.g '1', '20', '5' / 'one_hand', ...)
 
-    if prob_array is not None and len(prob_array) == 27:
-        for i in range(27):
+    if prob_array is not None and len(prob_array) == 9:
+        for i in range(9):
             prob_array[i] = float(probs_tensor[i])
 
     # fetch probabilites

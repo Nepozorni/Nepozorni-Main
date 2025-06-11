@@ -1,14 +1,14 @@
 ### Temporary fix for new numbering system
 
-group_1 = ["1", "19"] # levo ogledalo
-group_2 = ["15", "20"] # desno ogledalo
-group_3 = ["2", "3", "4", "18"] #
-group_4 = ["5", "6", "7", "8", "9", "21"] # naravnost
-group_5 = ["10", "11", "12", "13", "14"]
-group_6 = ["22", "23", "24", "25", "26"] # vetrobranska stran
-group_7 = ["16"]
-group_8 = ["17"]
-group_9 = ["27"]
+group_1 = ["Box01"] # levo ogledalo
+group_2 = ["Box02"] # desno ogledalo
+group_3 = ["Box03"] #
+group_4 = ["Box04"] # naravnost
+group_5 = ["Box05"]
+group_6 = ["Box06"] # vetrobranska stran
+group_7 = ["Box07"]
+group_8 = ["Box08"]
+group_9 = ["Box09"]
 
 def evaluate(head_prediction, hand_prediction, seconds_head_pred, seconds_hand_pred) -> float:
     assessment = 100
