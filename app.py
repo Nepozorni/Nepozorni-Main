@@ -93,7 +93,7 @@ def load_file():
         hand_output.insert(tk.END, model_hand_output)
         hand_output.config(state="disabled")
 
-        _, model_head_output = run_model.run_model("./Models/boxesmodel50epochs.pt", image_path=path, prob_array=head_probabilities) #zazene se model za glavo in rezultate zapise v gui
+        _, model_head_output = run_model("./Models/boxesmodel50epochs.pt", image_path=path, prob_array=head_probabilities) #zazene se model za glavo in rezultate zapise v gui
         update_boxes_on_image(head_probabilities)
 
         #izpise samo max 5 tock z najvecjim probability
@@ -185,13 +185,9 @@ def worker():
             video_active = False
             break
 
-        _, hand_out = run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
-
-        _, full_head_output = run_model("./Models/boxesmodel50epochs.pt", image=frame, prob_array=head_probabilities) #klicanje modela za head
-
         update_boxes_on_image(head_probabilities)
         n_hand_pred, hand_out = run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
-        n_head_pred, full_head_output = run_model("./Models/boxesmodel50epochs.pt", image=frame) #klicanje modela za head
+        n_head_pred, full_head_output = run_model("./Models/boxesmodel50epochs.pt", image=frame, prob_array=head_probabilities) #klicanje modela za head
 
         if head_pred != n_head_pred: # handle napoved rok
             head_pred = n_head_pred

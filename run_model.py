@@ -1,17 +1,6 @@
 from ultralytics import YOLO
 
 def run_model(model_path: str, image_path: str = None, image = None, prob_array: list = None) -> tuple:
-    """Function runs YOLOv8 model and returns top prediction and debug string
-        SHAPE:
-        > PREDICTION: p
-        > PROBABILITY:
-        p1 : 0.n
-        p2 : 0.m
-        p3 : 0.o
-        (where n > m > o)
-        > INFERENCE TIME: T ms
-    """
-
     model = YOLO(model_path) # set model
 
     if image is None:

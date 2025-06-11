@@ -1,5 +1,3 @@
-### Temporary fix for new numbering system
-
 group_1 = ["Box01"] # levo ogledalo
 group_2 = ["Box02"] # desno ogledalo
 group_3 = ["Box03"] #
@@ -16,7 +14,6 @@ def evaluate(head_prediction, hand_prediction, seconds_head_pred, seconds_hand_p
     hand_magnitude = 0
     head_magnitude = 0
 
-    # +1 razreši 0 sekund ker je "prva sekunda"
     seconds_hand_pred += 1
     seconds_head_pred += 1
 
