@@ -3,7 +3,8 @@ from tkinter import filedialog
 from PIL import Image, ImageTk, ImageDraw
 import cv2
 import os
-import run_model
+from run_model import run_model
+from evaluate import *
 from datetime import datetime
 import threading
 import queue
@@ -96,7 +97,7 @@ def load_file():
 
         head_probabilities = [0.0] * 27
 
-        _, model_hand_output = run_model.run_model("./Models/model-21-05-2025.pt", image_path=path) #zazene se model za roke in v gui se izpise rezultat
+        _, model_hand_output = run_model("./Models/model-21-05-2025.pt", image_path=path) #zazene se model za roke in v gui se izpise rezultat
         hand_output.config(state="normal")
         hand_output.delete(1.0, tk.END)
         hand_output.insert(tk.END, model_hand_output)
@@ -179,22 +180,43 @@ def log(message):
 def worker():
     global model_ready, video_active
     cap = cv2.VideoCapture(file_path)
-    global frame_count_hand, frame_count_head
 
-    prvi_output = True  #video se zacne predvajat ko model vrne prvi output
     head_probabilities = [0.0] * 27
 
+    prvi_output = True #video se zacne predvajat ko model vrne prvi output
+    head_pred = ""
+    hand_pred = ""
+    seconds_head_pred = 0
+    seconds_hand_pred = 0
+    i = 0
     while video_playing and cap.isOpened(): #beremo frame po frame iz videa
         ret, frame = cap.read()
         if not ret:
             video_active = False
             break
 
-        _, hand_out = run_model.run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
+        _, hand_out = run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
 
-        _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame, prob_array=head_probabilities) #klicanje modela za head
+        _, full_head_output = run_model("./Models/face_30_epochs.pt", image=frame, prob_array=head_probabilities) #klicanje modela za head
 
         update_boxes_on_image(head_probabilities)
+        n_hand_pred, hand_out = run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
+        n_head_pred, full_head_output = run_model("./Models/face_30_epochs.pt", image=frame) #klicanje modela za head
+
+        if head_pred != n_head_pred: # handle napoved rok
+            head_pred = n_head_pred
+            seconds_head_pred = 0
+        elif i % 30 == 0: # napoved je enaka kot ena sekunda nazaj
+            seconds_head_pred += 1
+
+        if hand_pred != n_hand_pred:
+            hand_pred = n_hand_pred
+            seconds_hand_pred = 0
+        elif i % 30 == 0:
+            seconds_hand_pred += 1
+
+        # kliči evalvacijsko funkcijo
+        assessment = evaluate(head_pred, hand_pred, seconds_head_pred, seconds_hand_pred)
 
         #izpise samo max 5 tock z najvecjim probability za head model
         head_lines = full_head_output.splitlines()
@@ -204,20 +226,20 @@ def worker():
 
         head_output = f"{prediction_line}\n> TOP 5 PROBABILITIES:\n" + "\n".join(prob_lines) + f"\n{inference_line}"
 
-        model_queue.put((hand_out, head_output)) #rezultat damo v queue
+        model_queue.put((hand_out, head_output, str(assessment), str(100-assessment))) #rezultat damo v queue
 
         if prvi_output: #model_ready damo na true, video se zacne predvajat
             model_ready = True
             prvi_output = False
 
+        i += 1
     cap.release()
 
 def model_output():
     global model_ready
     try:
         while True:
-            hand_out, head_out = model_queue.get_nowait() #preverimo, ce je kej v queue, ce je, izpisemo
-
+            hand_out, head_out, assessment, penalty = model_queue.get_nowait() #preverimo, ce je kej v queue, ce je, izpisemo
             #izpis v UI
             hand_output.config(state="normal")
             hand_output.delete(1.0, tk.END)
@@ -228,6 +250,16 @@ def model_output():
             head_output.delete(1.0, tk.END)
             head_output.insert(tk.END, head_out)
             head_output.config(state="disabled")
+
+            assessment_var.set(f"{assessment}%")
+            penalty_var.set(f"{penalty}%")
+
+            if not is_attentive(float(assessment)):
+                attentive_var.set("INNATENTIVE")
+                attentive_label.config(bg="red")
+            else:
+                attentive_var.set("ATTENTIVE")
+                attentive_label.config(bg="lightgreen")
 
             if not update_video.running and model_ready: #ko dobimo prvi output, zazenemo video
                 update_video.running = True
@@ -243,6 +275,13 @@ root.title("Nadzor pozornosti")
 root.geometry("1200x800")
 
 file_path_var = tk.StringVar() #"textbox" kjer se bo izpisal path
+
+assessment_var = tk.StringVar()
+penalty_var = tk.StringVar()
+attentive_var = tk.StringVar()
+attentive_var.set("ATTENTIVE")
+assessment_var.set("0%")
+penalty_var.set("0%")
 
 #------ZGORNJI DEL------
 #select file text + "textbox" + button load
@@ -288,6 +327,35 @@ hand_output = tk.Text(hand_frame, width=30, height=20, bg="lightgray", state="di
 hand_output.pack()
 hand_output.config(state="normal")
 hand_output.config(state="disabled")
+
+#--------DEL OCEN-------
+eval_frame = tk.Frame(root)
+eval_frame.pack(fill=tk.BOTH, padx=10, pady=10)
+
+# to naredi, da je enakomerno porazdeljeno po dolzini
+eval_frame.grid_columnconfigure(0, weight=1)
+eval_frame.grid_columnconfigure(1, weight=1)
+eval_frame.grid_columnconfigure(2, weight=1)
+
+# frame za pozornost
+att_frame = tk.Frame(eval_frame)
+att_frame.grid(row=0, column=0, padx=20)
+
+tk.Label(att_frame, text="Attentiveness:", font=('Arial', 10, 'bold')).grid(row=0, column=0, sticky='w')
+eval_label = tk.Label(att_frame, textvariable=assessment_var, font=('Arial', 20, 'bold'))
+eval_label.grid(row=1, column=0)
+
+# frame za odštevek
+penalty_frame = tk.Frame(eval_frame)
+penalty_frame.grid(row=0, column=1, padx=20)
+
+tk.Label(penalty_frame, text="Penalty:", font=('Arial', 10, 'bold')).grid(row=0, column=0, sticky='w')
+penalty_label = tk.Label(penalty_frame, textvariable=penalty_var, font=('Arial', 20, 'bold'))
+penalty_label.grid(row=1, column=0)
+
+# label pozornosti
+attentive_label = tk.Label(eval_frame, textvariable=attentive_var, font=('Arial', 20, 'bold'), fg="black", bg="lightgreen", pady=2)
+attentive_label.grid(row=0, column=2, padx=20)
 
 #------SPODNJI DEL------
 bottom_frame = tk.Frame(root)
