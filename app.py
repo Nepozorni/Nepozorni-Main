@@ -8,15 +8,6 @@ from evaluate import *
 from datetime import datetime
 import threading
 import queue
-"""
-from prometheus_client import Counter, Gauge
-import GPUtil
-import psutil
-import paho.mqtt.client as mqtt
-import json
-import socket
-import time
-"""
 
 file_path = None
 video_player = None #za predvajanje videa
@@ -29,12 +20,10 @@ model_ready = False
 
 model_queue = queue.Queue() #omogoca komunikacijo med thread in UI
 
-
-
 def update_boxes_on_image(prob_array):
     try:
         # Load base image
-        base_img = Image.open("tocke.png").resize((721, 282)).convert("RGBA")
+        base_img = Image.open("tocke.jpg").resize((600, 282)).convert("RGBA")
 
         # Create transparent overlay
         overlay = Image.new("RGBA", base_img.size, (255, 255, 255, 0))
@@ -85,7 +74,6 @@ def load_file():
         log(f"\"{path}\" loaded, type: video")
         start_video(path)
 
-        # Samo zaženi thread, ki bo frame-e procesiral v ozadju
         model_thread = threading.Thread(target=worker, daemon=True) #zagon modelov
         model_thread.start()
 
@@ -404,7 +392,7 @@ boxesModel = {
 
 # Open and draw image
 try:
-    tocke_img = Image.open("tocke.png").resize((721, 282))
+    tocke_img = Image.open("tocke.jpg").resize((600, 282))
     draw = ImageDraw.Draw(tocke_img, "RGBA")
 
     for box_points in boxes.values():
@@ -419,7 +407,7 @@ try:
     image_label.image = tocke_img_tk
     image_label.pack()
 except Exception as e:
-    image_label = tk.Label(image_frame, text=f"Failed to load tocke.png\n{e}", fg="red")
+    image_label = tk.Label(image_frame, text=f"Failed to load tocke.jpg\n{e}", fg="red")
     image_label.pack()
 
 # right: log box
