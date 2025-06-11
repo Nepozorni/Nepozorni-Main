@@ -26,43 +26,6 @@ model_ready = False
 
 model_queue = queue.Queue() #omogoca komunikacijo med thread in UI
 
-# Prometheus
-frame_count_hand = Counter('processed_frames_hand_total', 'Stevilo obdelanih frames modela glave')
-frame_count_head = Counter('processed_frames_head_total', 'Stevilo obdelanih frames modela roke')
-cpu_usage = Gauge('cpu_usage_percent', 'Obremenitev CPU')
-gpu_usage = Gauge('gpu_usage_percent', 'Obremenitev GPU')
-
-ip_address = socket.gethostbyname(socket.gethostname())
-mqtt_client = mqtt.Client(client_id=ip_address)
-mqtt_client.connect("localhost", 1883, 60)
-mqtt_client.loop_start()
-
-def monitor_usage():
-    global frame_count_hand, frame_count_head
-
-    while True:
-        if not video_active:
-            time.sleep(0.5)
-            continue
-
-        cpu = psutil.cpu_percent(interval=None)
-        try:
-            gpus = GPUtil.getGPUs()
-            gpu = gpus[0].load * 100 if gpus else 0
-        except:
-            gpu = 0
-
-        data = {
-            "cpu usage": cpu,
-            "gpu usage": gpu,
-            "frames_hand_total": frame_count_hand._value.get(),
-            "frames_head_total": frame_count_head._value.get(),
-        }
-        mqtt_client.publish("/metrike", json.dumps(data), qos=1)
-
-        #log(f"[DEBUG] skupno: roka={frame_count_hand}, glava={frame_count_head}")
-
-        time.sleep(1) #posilja na eno sekundo
 
 
 def update_boxes_on_image(prob_array):
@@ -105,8 +68,6 @@ def update_boxes_on_image(prob_array):
 #klice ob kliku gumba load
 def load_file():
     global video_player, video_playing, image_player, file_path, model_ready, frame_count_hand, frame_count_head #spreminjanje globalih spremenljivk
-    frame_count_hand._value.set(0)
-    frame_count_head._value.set(0)
 
     path = filedialog.askopenfilename(filetypes=[("Media files", "*.png *.jpg *.jpeg *.mp4 *.avi *.mov *.mkv")]) #odpremo file explorer
     if not path: #close file explorer
@@ -230,12 +191,8 @@ def worker():
             break
 
         _, hand_out = run_model.run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
-        if hand_out is not None:
-            frame_count_hand.inc()
 
         _, full_head_output = run_model.run_model("./Models/face_30_epochs.pt", image=frame, prob_array=head_probabilities) #klicanje modela za head
-        if full_head_output is not None:
-            frame_count_head.inc()
 
         update_boxes_on_image(head_probabilities)
 
@@ -251,7 +208,6 @@ def worker():
 
         if prvi_output: #model_ready damo na true, video se zacne predvajat
             model_ready = True
-            threading.Thread(target=monitor_usage, daemon=True).start()
             prvi_output = False
 
     cap.release()
