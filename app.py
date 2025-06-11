@@ -64,10 +64,15 @@ def monitor_usage():
 
         time.sleep(1) #posilja na eno sekundo
 
+
 def update_boxes_on_image(prob_array):
     try:
-        updated_img = Image.open("tocke.png").resize((721, 282))
-        draw = ImageDraw.Draw(updated_img, "RGBA")
+        # Load base image
+        base_img = Image.open("tocke.png").resize((721, 282)).convert("RGBA")
+
+        # Create transparent overlay
+        overlay = Image.new("RGBA", base_img.size, (255, 255, 255, 0))
+        draw = ImageDraw.Draw(overlay)
 
         for box_id, point_ids in boxes.items():
             xs = [points[i][0] for i in point_ids]
@@ -75,17 +80,21 @@ def update_boxes_on_image(prob_array):
             min_x, max_x = min(xs), max(xs)
             min_y, max_y = min(ys), max(ys)
 
-            # Sum of probabilities for points in this box
             prob_sum = sum(prob_array[i - 1] for i in point_ids if 0 <= i - 1 < len(prob_array))
-            alpha = int(min(255, max(0, prob_sum * 255)))  # Clamp between 0 and 255
+            prob_clamped = min(1.0, max(0.0, prob_sum))
+
+            alpha = int(prob_clamped * 150)  # max alpha = 150 (more see-through)
 
             draw.rectangle(
                 [min_x - 5, min_y - 5, max_x + 5, max_y + 5],
                 fill=(0, 255, 0, alpha),
-                outline=(0, 128, 0)
+                outline=(0, 128, 0, 255)
             )
 
-        tocke_img_tk_updated = ImageTk.PhotoImage(updated_img)
+        # Composite overlay onto base image
+        combined = Image.alpha_composite(base_img, overlay)
+
+        tocke_img_tk_updated = ImageTk.PhotoImage(combined)
         image_label.configure(image=tocke_img_tk_updated)
         image_label.image = tocke_img_tk_updated
 
@@ -365,7 +374,7 @@ try:
         ys = [points[i][1] for i in box_points]
         min_x, max_x = min(xs), max(xs)
         min_y, max_y = min(ys), max(ys)
-        draw.rectangle([min_x - 5, min_y - 5, max_x + 5, max_y + 5], fill=(0, 255, 0, 100), outline=(0, 128, 0))
+        draw.rectangle([min_x - 5, min_y - 5, max_x + 5, max_y + 5], fill=(0, 255, 0, 40), outline=(0, 128, 0))
 
     tocke_img_tk = ImageTk.PhotoImage(tocke_img)
     image_label = tk.Label(image_frame, image=tocke_img_tk)
