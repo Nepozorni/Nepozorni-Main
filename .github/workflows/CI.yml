@@ -18,7 +18,7 @@ jobs:
 
       - name: Install libraries
         run: |
-              pip install Pillow opencv-python pytest
+              pip install Pillow opencv-python pytest -m Ultralytics 
 
       - name: Run tests
         run: |
