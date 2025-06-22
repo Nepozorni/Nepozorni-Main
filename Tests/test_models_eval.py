@@ -9,8 +9,8 @@ def test_evaluate_logic_changes():
     # Different predictions should reset counter
     result1 = evaluate("Box1", "one_hand", 0, 0)
     result2 = evaluate("Box1", "no_hands", 3, 3)
-    assert isinstance(result1, float)
-    assert isinstance(result2, float)
+    assert isinstance(result1, int)
+    assert isinstance(result2, int)
     assert 0 <= result1 <= 100
     assert 0 <= result2 <= 100
 
@@ -24,7 +24,7 @@ def test_run_model_on_dummy_image():
     assert isinstance(label, str)
     assert isinstance(output, str)
     assert len(label) > 0  # model should return something
-    assert "Inference time" in output
+    assert "INFERENCE TIME" in output
 
 def test_run_model_on_file():
     if not os.path.exists("sample.png"):
@@ -32,4 +32,4 @@ def test_run_model_on_file():
 
     label, output = run_model("./Models/model-21-05-2025.pt", image_path="sample.png")
     assert isinstance(label, str)
-    assert "Inference time" in output
+    assert "INFERENCE TIME" in output
