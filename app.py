@@ -87,13 +87,13 @@ def load_file():
 
         head_probabilities = [0.0] * 9
 
-        _, model_hand_output = run_model("./Models/model-21-05-2025.pt", image_path=path) #zazene se model za roke in v gui se izpise rezultat
+        hand_pred, model_hand_output = run_model("./Models/model-21-05-2025.pt", image_path=path) #zazene se model za roke in v gui se izpise rezultat
         hand_output.config(state="normal")
         hand_output.delete(1.0, tk.END)
         hand_output.insert(tk.END, model_hand_output)
         hand_output.config(state="disabled")
 
-        _, model_head_output = run_model("./Models/boxesmodel50epochs.pt", image_path=path, prob_array=head_probabilities) #zazene se model za glavo in rezultate zapise v gui
+        head_pred, model_head_output = run_model("./Models/boxesmodel50epochs.pt", image_path=path, prob_array=head_probabilities) #zazene se model za glavo in rezultate zapise v gui
         update_boxes_on_image(head_probabilities)
 
         #izpise samo max 5 tock z najvecjim probability
@@ -108,6 +108,19 @@ def load_file():
         head_output.delete(1.0, tk.END)
         head_output.insert(tk.END, head_output_text)
         head_output.config(state="disabled")
+
+        assessment = evaluate(head_pred, hand_pred, 2, 2)
+
+        assessment_var.set(f"{assessment}%")
+        penalty_var.set(f"{100-assessment}%")
+
+        if not is_attentive(float(assessment)):
+            attentive_var.set("INNATENTIVE")
+            attentive_label.config(bg="red")
+        else:
+            attentive_var.set("ATTENTIVE")
+            attentive_label.config(bg="lightgreen")
+
 
 #ko nalozimo video se ga runna
 def start_video(path):

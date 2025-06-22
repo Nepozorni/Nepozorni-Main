@@ -1,4 +1,8 @@
 from ultralytics import YOLO
+from ultralytics.utils import LOGGER
+import logging
+
+LOGGER.setLevel(logging.ERROR)
 
 def run_model(model_path: str, image_path: str = None, image = None, prob_array: list = None) -> tuple:
     model = YOLO(model_path) # set model
@@ -7,7 +11,7 @@ def run_model(model_path: str, image_path: str = None, image = None, prob_array:
         results = model(image_path) # run model
 
     if image_path is None:
-        results = model.predict(image)
+        results = model.predict(image, verbose=False)
 
     r = results[0]
 
