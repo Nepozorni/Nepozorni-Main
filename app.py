@@ -8,17 +8,63 @@ from evaluate import *
 from datetime import datetime
 import threading
 import queue
+from prometheus_client import Counter, Gauge, start_http_server
+import GPUtil
+import psutil
+import paho.mqtt.client as mqtt
+import json
+import socket
+import time
 
 file_path = None
 video_player = None #za predvajanje videa
 video_playing = False
-image_player = None #prikaz slike 
+image_player = None #prikaz slike
 video_label = None #referenca za box, kjer se bo prikazal video/slika
 log_box = None #referenca za log box
 video_active = False
 model_ready = False
 
 model_queue = queue.Queue() #omogoca komunikacijo med thread in UI
+
+# Prometheus
+frame_count_hand = Counter('processed_frames_hand_total', 'Stevilo obdelanih frames modela glave')
+frame_count_head = Counter('processed_frames_head_total', 'Stevilo obdelanih frames modela roke')
+cpu_usage = Gauge('cpu_usage_percent', 'Obremenitev CPU')
+gpu_usage = Gauge('gpu_usage_percent', 'Obremenitev GPU')
+
+ip_address = socket.gethostbyname(socket.gethostname())
+mqtt_client = mqtt.Client(client_id=ip_address)
+mqtt_client.connect("10.243.214.28", 1883, 60)
+mqtt_client.loop_start()
+
+def monitor_usage():
+    global frame_count_hand, frame_count_head
+
+    while True:
+        if not video_active:
+            time.sleep(0.5)
+            continue
+
+        cpu_usage.set(psutil.cpu_percent(interval=1))
+        try:
+            gpus = GPUtil.getGPUs()
+            if gpus:
+                gpu_usage.set(gpus[0].load * 100)
+        except:
+            gpu_usage.set(0)
+
+        data = {
+            "cpu usage": cpu_usage._value.get(),
+            "gpu usage": gpu_usage._value.get(),
+            "frames_hand_total": frame_count_hand._value.get(),
+            "frames_head_total": frame_count_head._value.get(),
+        }
+        mqtt_client.publish("/metrike", json.dumps(data), qos=1)
+
+        #log(f"[DEBUG] skupno: roka={frame_count_hand}, glava={frame_count_head}")
+
+        time.sleep(1) #posilja na eno sekundo
 
 def update_boxes_on_image(prob_array):
     try:
