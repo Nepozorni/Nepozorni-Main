@@ -106,6 +106,8 @@ def update_boxes_on_image(prob_array):
 #klice ob kliku gumba load
 def load_file():
     global video_player, video_playing, image_player, file_path, model_ready, frame_count_hand, frame_count_head #spreminjanje globalih spremenljivk
+    frame_count_hand._value.set(0)
+    frame_count_head._value.set(0)
 
     path = filedialog.askopenfilename(filetypes=[("Media files", "*.png *.jpg *.jpeg *.mp4 *.avi *.mov *.mkv")]) #odpremo file explorer
     if not path: #close file explorer
@@ -244,9 +246,14 @@ def worker():
             video_active = False
             break
 
-        update_boxes_on_image(head_probabilities)
         n_hand_pred, hand_out = run_model("./Models/model-21-05-2025.pt", image=frame) #klicanje modela za roke
+        if hand_out is not None:
+            frame_count_hand.inc()
         n_head_pred, full_head_output = run_model("./Models/boxesmodel50epochs.pt", image=frame, prob_array=head_probabilities) #klicanje modela za head
+        if full_head_output is not None:
+            frame_count_head.inc()
+
+        update_boxes_on_image(head_probabilities)
 
         if head_pred != n_head_pred: # handle napoved rok
             head_pred = n_head_pred
@@ -275,6 +282,7 @@ def worker():
 
         if prvi_output: #model_ready damo na true, video se zacne predvajat
             model_ready = True
+            threading.Thread(target=monitor_usage, daemon=True).start()
             prvi_output = False
 
         i += 1
