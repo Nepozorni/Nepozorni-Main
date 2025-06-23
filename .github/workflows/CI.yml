@@ -29,3 +29,13 @@ jobs:
         with:
           name: test-results
           path: results.xml
+
+      - name: Zip entire repo
+        run: |
+          zip -r nepozorni.zip . -x '*.git*' -x 'nepozorni.zip' -x 'results.xml'
+
+      - name: Upload zipped repo
+        uses: actions/upload-artifact@v4
+        with:
+          name: zipped-repo
+          path: nepozorni.zip

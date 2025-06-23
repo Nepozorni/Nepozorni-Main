@@ -27,9 +27,9 @@ def test_run_model_on_dummy_image():
     assert "INFERENCE TIME" in output
 
 def test_run_model_on_file():
-    if not os.path.exists("sample.png"):
-        pytest.skip("sample.jpg not available for test")
+    if not os.path.exists("tests/sample.png"):
+        pytest.skip("sample.png not available for test")
 
-    label, output = run_model("./Models/model-21-05-2025.pt", image_path="sample.png")
+    label, output = run_model("./Models/model-21-05-2025.pt", image_path="tests/sample.png")
     assert isinstance(label, str)
     assert "INFERENCE TIME" in output
