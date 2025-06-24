@@ -30,6 +30,6 @@ def test_run_model_on_file():
     if not os.path.exists("./Tests/sample.png"):
         pytest.skip("sample.png not available for test")
 
-    label, output = run_model("./Models/model-21-05-2025.pt", image_path="./sample.png")
+    label, output = run_model("./Models/model-21-05-2025.pt", image_path="./Tests/sample.png")
     assert isinstance(label, str)
     assert "INFERENCE TIME" in output
