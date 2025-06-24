@@ -2,7 +2,7 @@ name: Nepozorni project CI
 
 on:
   push:
-    branches: [main, release]
+    branches: [main, release, development]
 
 jobs:
   test:
