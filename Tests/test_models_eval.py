@@ -20,16 +20,16 @@ def test_is_attentive_threshold():
 
 def test_run_model_on_dummy_image():
     dummy_image = np.zeros((360, 640, 3), dtype=np.uint8)  # black image
-    label, output = run_model("./Models/model-21-05-2025.pt", image=dummy_image)
+    label, output = run_model("../Models/model-21-05-2025.pt", image=dummy_image)
     assert isinstance(label, str)
     assert isinstance(output, str)
     assert len(label) > 0  # model should return something
     assert "INFERENCE TIME" in output
 
 def test_run_model_on_file():
-    if not os.path.exists("tests/sample.png"):
+    if not os.path.exists("./sample.png"):
         pytest.skip("sample.png not available for test")
 
-    label, output = run_model("./Models/model-21-05-2025.pt", image_path="tests/sample.png")
+    label, output = run_model("../Models/model-21-05-2025.pt", image_path="./sample.png")
     assert isinstance(label, str)
     assert "INFERENCE TIME" in output
