@@ -72,7 +72,7 @@ Now, create a new branch based on the Jira ticket.
 
 1. In the **Source Control** panel, click on the **Branches** dropdown.
 2. Choose **Create new branch from ...** and select either the `main` or `test` branch
-3. Enter a descriptive branch name that includes the Jira ID, such as `SCRUM-123-brief-description`, and press `<strong>`Enter`</strong>`.
+3. Enter a descriptive branch name that includes the Jira ID, such as `SCRUM-123-brief-description`, and press **Enter**.
 4. Confirm that you have switched to your new branch.
 
 #### Command Line
