@@ -52,7 +52,7 @@ Make sure to start from the correct base branch (`release` or `development`), de
 
 1. Go to the **Source Control** panel.
 2. Open the **Branches** menu and select **Checkout to...**
-3. Choose either the `main` or `test` branch as your base.
+3. Choose either the `release` or `development` branch as your base.
 
 #### Command Line
 
@@ -71,7 +71,7 @@ Now, create a new branch based on the Jira ticket.
 #### GUI
 
 1. In the **Source Control** panel, click on the **Branches** dropdown.
-2. Choose **Create new branch from ...** and select either the `main` or `test` branch
+2. Choose **Create new branch from ...** and select either the `release` or `development` branch
 3. Enter a descriptive branch name that includes the Jira ID, such as `SCRUM-123-brief-description`, and press **Enter**.
 4. Confirm that you have switched to your new branch.
 
@@ -80,9 +80,9 @@ Now, create a new branch based on the Jira ticket.
 Alternatively, in the Terminal, you can use:
 
 ```bash
-git checkout -b SCRUM-123-brief-description main
+git checkout -b SCRUM-123-brief-description release
 # or
-git checkout -b SCRUM-123-brief-description test
+git checkout -b SCRUM-123-brief-description development
 ```
 
 5. Push the new branch to GitHub to make it available for the team:
